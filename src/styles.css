@@ -1,15 +1,15 @@
 :root {
-  --bg: #000000;
-  --bg-gradient: radial-gradient(circle at 50% 0%, #1a1a1a 0%, #000000 100%);
-  --surface: rgba(255, 255, 255, 0.03);
-  --surface-hover: rgba(255, 255, 255, 0.06);
-  --border: rgba(255, 255, 255, 0.1);
-  --border-focus: rgba(255, 255, 255, 0.3);
+  --bg: #030712;
+  --bg-gradient: radial-gradient(circle at 50% 0%, rgba(6, 182, 212, 0.18) 0%, rgba(3, 7, 18, 1) 100%);
+  --surface: rgba(15, 23, 42, 0.45);
+  --surface-hover: rgba(30, 41, 59, 0.6);
+  --border: rgba(255, 255, 255, 0.05);
+  --border-focus: rgba(6, 182, 212, 0.6);
   --text: #F8FAFC;
-  --muted: #A1A1AA;
-  --accent: #FFFFFF;
-  --accent-hover: #E4E4E7;
-  --accent-gradient: linear-gradient(135deg, #FFFFFF 0%, #A1A1AA 100%);
+  --muted: #94A3B8;
+  --accent: #06b6d4;
+  --accent-hover: #0891b2;
+  --accent-gradient: linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%);
   --success: #10B981;
   --danger: #EF4444;
   --warning: #F59E0B;
@@ -29,7 +29,11 @@ body {
   font-family: 'Outfit', system-ui, -apple-system, sans-serif;
   line-height: 1.5;
   color: var(--text);
-  background: var(--bg-gradient);
+  background: var(--bg);
+  background-image: 
+    radial-gradient(circle at 50% 0%, rgba(6, 182, 212, 0.18) 0%, transparent 50%),
+    radial-gradient(circle at 10% 80%, rgba(59, 130, 246, 0.08) 0%, transparent 40%),
+    radial-gradient(circle at 90% 20%, rgba(147, 51, 234, 0.06) 0%, transparent 40%);
   background-attachment: fixed;
   min-width: 320px;
 }
@@ -37,8 +41,8 @@ body {
 /* Scrollbar */
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.2); }
+::-webkit-scrollbar-thumb { background: rgba(6, 182, 212, 0.15); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(6, 182, 212, 0.3); }
 
 /* Typography */
 h1, h2, h3, h4 { margin: 0; font-weight: 600; }
@@ -55,17 +59,20 @@ button { cursor: pointer; }
 input, textarea, select {
   width: 100%;
   border: 1px solid var(--border);
-  border-radius: 8px;
-  background: rgba(0, 0, 0, 0.2);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.3);
+  backdrop-filter: blur(8px);
   color: var(--text);
-  padding: 0.85rem 1rem;
+  padding: 0.85rem 1.1rem;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+  transition: all 0.25s ease;
 }
 
 input:focus, textarea:focus, select:focus {
   outline: none;
   border-color: var(--border-focus);
-  background: rgba(0, 0, 0, 0.3);
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+  background: rgba(15, 23, 42, 0.5);
+  box-shadow: 0 0 0 4px rgba(6, 182, 212, 0.15);
 }
 
 select option {
@@ -76,11 +83,11 @@ select option {
 /* Glassmorphism Classes */
 .auth-card, .panel, .metric, .column, .empty-state, .project-card {
   background: var(--surface);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 16px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
 }
 
 /* Auth Shell */
@@ -185,28 +192,35 @@ select option {
   border: none;
   border-radius: 8px;
   color: var(--muted);
+  transition: all 0.2s ease;
+}
+
+.segmented button:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .segmented .active {
-  background: var(--surface);
+  background: rgba(255, 255, 255, 0.1);
   color: var(--text);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
 }
 
 .primary {
-  padding: 1rem 1.5rem;
-  background: var(--accent-gradient);
-  color: #000;
+  padding: 1rem 1.75rem;
+  background: #ffffff;
+  color: #030712;
   border: none;
   font-weight: 600;
-  border-radius: 8px;
-  box-shadow: 0 4px 14px rgba(255, 255, 255, 0.15);
+  border-radius: 9999px;
+  box-shadow: 0 4px 14px rgba(6, 182, 212, 0.25);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .primary:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(255, 255, 255, 0.25);
+  transform: translateY(-2px) scale(1.02);
+  background: #f8fafc;
+  box-shadow: 0 6px 20px rgba(6, 182, 212, 0.4);
 }
 
 .primary.outline {
@@ -272,10 +286,10 @@ select option {
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
-  padding: 1.5rem;
-  background: rgba(11, 15, 25, 0.5);
-  backdrop-filter: blur(20px);
-  border-right: 1px solid var(--border);
+  padding: 2rem 1.5rem;
+  background: rgba(3, 7, 18, 0.6);
+  backdrop-filter: blur(30px);
+  border-right: 1px solid rgba(255, 255, 255, 0.03);
   z-index: 10;
 }
 
@@ -564,9 +578,9 @@ select option {
   align-items: flex-end;
   gap: 2rem;
   padding-top: 1rem;
-  padding-bottom: 2rem;
-  margin-bottom: 2rem;
-  border-bottom: 1px solid var(--border);
+  padding-bottom: 2.25rem;
+  margin-bottom: 2.25rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .header-info {
@@ -666,10 +680,11 @@ select option {
 .column {
   display: flex;
   flex-direction: column;
-  padding: 1.5rem;
-  background: rgba(15, 23, 42, 0.4);
-  border-radius: 16px;
-  transition: background 0.2s;
+  padding: 1.75rem;
+  background: rgba(15, 23, 42, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.03);
+  border-radius: 20px;
+  transition: all 0.3s ease;
 }
 
 .column.drag-over {
@@ -714,11 +729,14 @@ select option {
 
 .task-card {
   padding: 1.5rem;
-  border-left: 5px solid var(--accent);
-  background: var(--surface);
-  transition: transform 0.2s, box-shadow 0.2s, opacity 0.2s;
-  border-radius: 12px;
+  border-left: 4px solid var(--accent);
+  background: rgba(15, 23, 42, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.03);
+  border-left-width: 4px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 14px;
   cursor: grab;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
 }
 
 .task-card:active {
@@ -726,9 +744,10 @@ select option {
 }
 
 .task-card:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 12px 28px rgba(0,0,0,0.3);
-  background: var(--surface-hover);
+  transform: translateY(-4px) scale(1.01);
+  box-shadow: 0 12px 30px rgba(6, 182, 212, 0.12);
+  background: rgba(30, 41, 59, 0.5);
+  border-color: rgba(6, 182, 212, 0.25);
 }
 
 .task-card.priority-high { border-left-color: var(--danger); }

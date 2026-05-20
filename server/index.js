@@ -41,6 +41,7 @@ const taskSchema = z.object({
   priority: z.enum(["Low", "Medium", "High"]),
   status: z.enum(["To Do", "In Progress", "Done"]).optional().default("To Do"),
   assignedTo: z.number().int().positive().optional().nullable(),
+  backupAssignedTo: z.number().int().positive().optional().nullable(),
 });
 
 function tokenFor(user) {
@@ -71,8 +72,9 @@ async function requireAuth(req, res, next) {
     const token = header.startsWith("Bearer ") ? header.slice(7) : null;
     if (!token) return res.status(401).json({ error: "Authentication required" });
     const payload = jwt.verify(token, jwtSecret);
-    const { rows } = await query("SELECT id, name, email, global_role FROM users WHERE id = $1", [payload.id]);
+    const { rows } = await query("SELECT id, name, email, global_role, approved FROM users WHERE id = $1", [payload.id]);
     if (!rows[0]) return res.status(401).json({ error: "Invalid session" });
+    if (!rows[0].approved) return res.status(403).json({ error: "Account access revoked or pending approval" });
     req.user = rows[0];
     next();
   } catch {
@@ -112,13 +114,15 @@ app.get("/api/health", (_req, res) => res.json({ ok: true }));
 
 app.post("/api/auth/signup", validate(signupSchema), async (req, res) => {
   try {
-    if (req.body.globalRole === "System Admin" && req.body.adminKey !== "Admin123") {
+    const isSysAdmin = req.body.globalRole === "System Admin";
+    if (isSysAdmin && req.body.adminKey !== "Admin123") {
       return res.status(403).json({ error: "Invalid Admin Access Key" });
     }
     const hash = await bcrypt.hash(req.body.password, 12);
+    const approved = isSysAdmin ? true : false;
     const { rows } = await query(
-      "INSERT INTO users (name, email, password_hash, global_role) VALUES ($1, $2, $3, $4) RETURNING id, name, email, global_role",
-      [req.body.name, req.body.email, hash, req.body.globalRole],
+      "INSERT INTO users (name, email, password_hash, global_role, approved) VALUES ($1, $2, $3, $4, $5) RETURNING id, name, email, global_role, approved",
+      [req.body.name, req.body.email, hash, req.body.globalRole, approved],
     );
     sendAuth(res.status(201), rows[0]);
   } catch (error) {
@@ -132,6 +136,9 @@ app.post("/api/auth/login", validate(loginSchema), async (req, res) => {
   const user = rows[0];
   if (!user || !(await bcrypt.compare(req.body.password, user.password_hash))) {
     return res.status(401).json({ error: "Invalid email or password" });
+  }
+  if (!user.approved) {
+    return res.status(403).json({ error: "Your account is pending administrator approval." });
   }
   sendAuth(res, user);
 });
@@ -326,12 +333,13 @@ app.post("/api/projects/:id/requests/:userId/reject", requireAuth, requireMember
 });
 
 app.get("/api/projects/:id/tasks", requireAuth, requireMember, async (req, res) => {
-  const memberFilter = req.memberRole === "Admin" ? "" : "AND (t.assigned_to = $2 OR t.created_by = $2)";
+  const memberFilter = req.memberRole === "Admin" ? "" : "AND (t.assigned_to = $2 OR t.backup_assigned_to = $2 OR t.created_by = $2)";
   const params = req.memberRole === "Admin" ? [req.projectId] : [req.projectId, req.user.id];
   const { rows } = await query(
-    `SELECT t.*, u.name AS assignee_name, c.name AS creator_name
+    `SELECT t.*, u.name AS assignee_name, u2.name AS backup_assignee_name, c.name AS creator_name
      FROM tasks t
      LEFT JOIN users u ON u.id = t.assigned_to
+     LEFT JOIN users u2 ON u2.id = t.backup_assigned_to
      JOIN users c ON c.id = t.created_by
      WHERE t.project_id = $1 ${memberFilter}
      ORDER BY
@@ -351,9 +359,16 @@ app.post("/api/projects/:id/tasks", requireAuth, requireMember, requireAdmin, va
       if (!assignee) return res.status(400).json({ error: "Assignee must be a project member" });
     }
   }
+  if (req.body.backupAssignedTo) {
+    const backupAssigneeUser = await query("SELECT global_role FROM users WHERE id = $1", [req.body.backupAssignedTo]);
+    if (backupAssigneeUser.rows[0]?.global_role !== "System Admin") {
+      const backupAssignee = await membership(req.projectId, req.body.backupAssignedTo);
+      if (!backupAssignee) return res.status(400).json({ error: "Backup Assignee must be a project member" });
+    }
+  }
   const { rows } = await query(
-    `INSERT INTO tasks (project_id, title, description, due_date, priority, status, assigned_to, created_by)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+    `INSERT INTO tasks (project_id, title, description, due_date, priority, status, assigned_to, backup_assigned_to, created_by)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
     [
       req.projectId,
       req.body.title,
@@ -362,6 +377,7 @@ app.post("/api/projects/:id/tasks", requireAuth, requireMember, requireAdmin, va
       req.body.priority,
       req.body.status,
       req.body.assignedTo || null,
+      req.body.backupAssignedTo || null,
       req.user.id,
     ],
   );
@@ -373,7 +389,7 @@ app.patch("/api/projects/:id/tasks/:taskId", requireAuth, requireMember, async (
   const current = await query("SELECT * FROM tasks WHERE id = $1 AND project_id = $2", [taskId, req.projectId]);
   const task = current.rows[0];
   if (!task) return res.status(404).json({ error: "Task not found" });
-  const isAssignedMember = task.assigned_to === req.user.id && req.memberRole === "Member";
+  const isAssignedMember = (task.assigned_to === req.user.id || task.backup_assigned_to === req.user.id) && req.memberRole === "Member";
   if (req.memberRole !== "Admin" && !isAssignedMember) return res.status(403).json({ error: "Task access denied" });
 
   const patchSchema = req.memberRole === "Admin" ? taskSchema.partial() : z.object({ status: z.enum(["To Do", "In Progress", "Done"]) });
@@ -384,14 +400,21 @@ app.patch("/api/projects/:id/tasks/:taskId", requireAuth, requireMember, async (
   if (parsed.data.assignedTo !== undefined) {
     next.assigned_to = parsed.data.assignedTo;
   }
+  if (parsed.data.backupAssignedTo !== undefined) {
+    next.backup_assigned_to = parsed.data.backupAssignedTo;
+  }
   if (next.assigned_to) {
     const assignee = await membership(req.projectId, Number(next.assigned_to));
     if (!assignee) return res.status(400).json({ error: "Assignee must be a project member" });
   }
+  if (next.backup_assigned_to) {
+    const backupAssignee = await membership(req.projectId, Number(next.backup_assigned_to));
+    if (!backupAssignee) return res.status(400).json({ error: "Backup Assignee must be a project member" });
+  }
   const { rows } = await query(
     `UPDATE tasks SET title = $1, description = $2, due_date = $3, priority = $4, status = $5,
-      assigned_to = $6, updated_at = NOW()
-     WHERE id = $7 AND project_id = $8 RETURNING *`,
+      assigned_to = $6, backup_assigned_to = $7, updated_at = NOW()
+     WHERE id = $8 AND project_id = $9 RETURNING *`,
     [
       next.title,
       next.description,
@@ -399,6 +422,7 @@ app.patch("/api/projects/:id/tasks/:taskId", requireAuth, requireMember, async (
       next.priority,
       next.status,
       next.assigned_to || null,
+      next.backup_assigned_to || null,
       taskId,
       req.projectId,
     ],
@@ -453,6 +477,105 @@ app.get("/api/dashboard", requireAuth, async (req, res) => {
     [req.user.id],
   );
   res.json({ summary: rows[0], perUser: perUser.rows });
+});
+
+app.get("/api/attendance/today", requireAuth, async (req, res) => {
+  const { rows } = await query(
+    "SELECT * FROM attendance WHERE user_id = $1 AND date = CURRENT_DATE",
+    [req.user.id]
+  );
+  const tasksDone = await query(
+    `SELECT COUNT(*)::INT AS count FROM tasks
+     WHERE (assigned_to = $1 OR backup_assigned_to = $1)
+       AND status = 'Done'
+       AND updated_at >= CURRENT_DATE`,
+     [req.user.id]
+  );
+  res.json({
+    attendance: rows[0] || null,
+    tasksCompletedToday: tasksDone.rows[0]?.count || 0
+  });
+});
+
+app.post("/api/attendance/punch-in", requireAuth, async (req, res) => {
+  try {
+    const { rows } = await query(
+      `INSERT INTO attendance (user_id, date, punch_in)
+       VALUES ($1, CURRENT_DATE, NOW())
+       ON CONFLICT (user_id, date) DO UPDATE SET punch_in = NOW()
+       RETURNING *`,
+      [req.user.id]
+    );
+    res.status(201).json({ attendance: rows[0] });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/api/attendance/punch-out", requireAuth, async (req, res) => {
+  try {
+    const tasksDone = await query(
+      `SELECT COUNT(*)::INT AS count FROM tasks
+       WHERE (assigned_to = $1 OR backup_assigned_to = $1)
+         AND status = 'Done'
+         AND updated_at >= CURRENT_DATE`,
+       [req.user.id]
+    );
+    const completedCount = tasksDone.rows[0]?.count || 0;
+    if (completedCount < 1) {
+      return res.status(400).json({ error: "You must complete at least 1 objective today before you can punch out." });
+    }
+    const { rows } = await query(
+      `UPDATE attendance SET punch_out = NOW()
+       WHERE user_id = $1 AND date = CURRENT_DATE AND punch_out IS NULL
+       RETURNING *`,
+      [req.user.id]
+    );
+    if (!rows[0]) {
+      return res.status(400).json({ error: "No active punch-in found for today or you are already punched out." });
+    }
+    res.json({ attendance: rows[0] });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get("/api/admin/users", requireAuth, async (req, res) => {
+  if (req.user.global_role !== "System Admin") {
+    return res.status(403).json({ error: "Access denied. System Admins only." });
+  }
+  const { rows } = await query(
+    `SELECT u.id, u.name, u.email, u.global_role, u.approved, u.created_at,
+       a.punch_in, a.punch_out,
+       (SELECT COUNT(*)::INT FROM tasks t WHERE t.assigned_to = u.id OR t.backup_assigned_to = u.id) AS total_tasks,
+       (SELECT COUNT(*)::INT FROM tasks t WHERE (t.assigned_to = u.id OR t.backup_assigned_to = u.id) AND t.status = 'Done') AS done_tasks,
+       (SELECT COUNT(*)::INT FROM tasks t WHERE (t.assigned_to = u.id OR t.backup_assigned_to = u.id) AND t.status = 'Done' AND t.updated_at >= CURRENT_DATE) AS done_today
+     FROM users u
+     LEFT JOIN attendance a ON a.user_id = u.id AND a.date = CURRENT_DATE
+     ORDER BY u.global_role DESC, u.name ASC`
+  );
+  res.json({ users: rows });
+});
+
+app.post("/api/admin/users/:userId/approve", requireAuth, async (req, res) => {
+  if (req.user.global_role !== "System Admin") {
+    return res.status(403).json({ error: "Access denied" });
+  }
+  const userId = Number(req.params.userId);
+  await query("UPDATE users SET approved = TRUE WHERE id = $1", [userId]);
+  res.json({ ok: true });
+});
+
+app.post("/api/admin/users/:userId/reject", requireAuth, async (req, res) => {
+  if (req.user.global_role !== "System Admin") {
+    return res.status(403).json({ error: "Access denied" });
+  }
+  const userId = Number(req.params.userId);
+  if (userId === req.user.id) {
+    return res.status(400).json({ error: "Cannot reject yourself" });
+  }
+  await query("DELETE FROM users WHERE id = $1 AND approved = FALSE", [userId]);
+  res.json({ ok: true });
 });
 
 const distPath = path.resolve(__dirname, "../dist");

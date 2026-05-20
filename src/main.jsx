@@ -84,8 +84,8 @@ function AuthScreen({ api, onAuthed }) {
         <div className="brand-mark" style={{ fontSize: "2rem", display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "1rem" }}>
           <FolderKanban size={56} style={{ color: "var(--accent)" }} /> Team Task Manager
         </div>
-        <h1>Where brilliant teams bring ideas to life.</h1>
-        <p>A beautifully simple workspace to organize tasks, collaborate with your team, and ship faster.</p>
+        <h1>The Intelligent Workspace for Hyper-Growth Teams.</h1>
+        <p>Streamline your engineering, align your product roadmap, and accelerate execution with a beautiful, high-performance workspace.</p>
       </section>
       <form className="auth-card" onSubmit={submit}>
         <div className="segmented">
@@ -155,6 +155,57 @@ function App({ routeProjectId = null, routeMemberId = null }) {
   const [priorityFilter, setPriorityFilter] = useState("");
   const [activeProfileId, setActiveProfileId] = useState(routeMemberId);
 
+  const [attendance, setAttendance] = useState(null);
+  const [tasksCompletedToday, setTasksCompletedToday] = useState(0);
+  const [adminUsers, setAdminUsers] = useState([]);
+
+  async function loadAttendance(currUser = user) {
+    const checkUser = currUser || user;
+    if (checkUser && checkUser.global_role === "Member") {
+      try {
+        const res = await api.request("/attendance/today");
+        setAttendance(res.attendance);
+        setTasksCompletedToday(res.tasksCompletedToday);
+      } catch (err) {
+        console.error("Error loading attendance", err);
+      }
+    }
+  }
+
+  async function loadAdminUsers(currUser = user) {
+    const checkUser = currUser || user;
+    if (checkUser && checkUser.global_role === "System Admin") {
+      try {
+        const res = await api.request("/admin/users");
+        setAdminUsers(res.users);
+      } catch (err) {
+        console.error("Error loading admin users", err);
+      }
+    }
+  }
+
+  async function handleApproveUser(userId) {
+    try {
+      await api.request(`/admin/users/${userId}/approve`, { method: "POST" });
+      await loadAdminUsers();
+      setToast("User Approved!");
+    } catch (err) {
+      alert("Error approving user: " + err.message);
+    }
+  }
+
+  async function handleRejectUser(userId) {
+    if (confirm("Are you sure you want to decline this registration request? This will delete the pending user account.")) {
+      try {
+        await api.request(`/admin/users/${userId}/reject`, { method: "POST" });
+        await loadAdminUsers();
+        setToast("User Request Declined");
+      } catch (err) {
+        alert("Error declining user: " + err.message);
+      }
+    }
+  }
+
   async function loadDiscoverable() {
     const data = await api.request("/projects/discover");
     setDiscoverable(data.projects);
@@ -175,6 +226,8 @@ function App({ routeProjectId = null, routeMemberId = null }) {
       setTasks([]);
       if (!nextActive && projectData.projects.length === 0) setViewMode("explore");
     }
+    loadAttendance();
+    loadAdminUsers();
   }
 
   async function loadProject(projectId) {
@@ -199,6 +252,8 @@ function App({ routeProjectId = null, routeMemberId = null }) {
     api.request("/me")
       .then((data) => {
         setUser(data.user);
+        loadAttendance(data.user);
+        loadAdminUsers(data.user);
         return loadAll(routeProjectId);
       })
       .catch((err) => {
@@ -265,6 +320,7 @@ function App({ routeProjectId = null, routeMemberId = null }) {
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
     const assignedTo = Number(form.get("assignedTo"));
+    const backupAssignedTo = Number(form.get("backupAssignedTo"));
     try {
       await api.request(`/projects/${activeId}/tasks`, {
         method: "POST",
@@ -274,10 +330,11 @@ function App({ routeProjectId = null, routeMemberId = null }) {
           dueDate: form.get("dueDate") || null,
           priority: form.get("priority"),
           assignedTo: assignedTo || null,
+          backupAssignedTo: backupAssignedTo || null,
         }),
       });
       formElement.reset();
-      await Promise.all([loadProject(activeId), loadAll(activeId)]);
+      await Promise.all([loadProject(activeId), loadAll(activeId), loadAdminUsers()]);
     } catch (err) {
       alert("Error creating task: " + err.message);
     }
@@ -288,7 +345,7 @@ function App({ routeProjectId = null, routeMemberId = null }) {
       method: "PATCH",
       body: JSON.stringify({ status }),
     });
-    await Promise.all([loadProject(activeId), loadAll(activeId)]);
+    await Promise.all([loadProject(activeId), loadAll(activeId), loadAttendance()]);
   }
 
   async function promoteMember(id) {
@@ -305,6 +362,66 @@ function App({ routeProjectId = null, routeMemberId = null }) {
   async function removeTask(id) {
     await api.request(`/projects/${activeId}/tasks/${id}`, { method: "DELETE" });
     await Promise.all([loadProject(activeId), loadAll(activeId)]);
+  }
+
+  const isMember = user.global_role === "Member";
+  const hasPunchedIn = attendance && attendance.punch_in;
+  const hasPunchedOut = attendance && attendance.punch_out;
+
+  if (isMember && !hasPunchedIn) {
+    return (
+      <main className="auth-shell">
+        <section className="auth-panel">
+          <div className="brand-mark" style={{ fontSize: "2rem", display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "1rem" }}>
+            <FolderKanban size={56} style={{ color: "var(--accent)" }} /> Team Task Manager
+          </div>
+          <h1>Good day, {user.name}.</h1>
+          <p>Please initialize your workday to review assigned initiatives and update sprint progress.</p>
+        </section>
+        <div className="auth-card glass-panel" style={{ display: 'grid', placeItems: 'center', padding: '3.5rem', textAlign: 'center', gap: '2rem' }}>
+          <RadioTower size={48} className="pulse-icon" style={{ color: 'var(--accent)' }} />
+          <div>
+            <h2>Workday Offline</h2>
+            <p style={{ color: 'var(--muted)', marginTop: '0.5rem' }}>Your current attendance is not marked for today.</p>
+          </div>
+          <button className="primary" style={{ width: '100%' }} onClick={async () => {
+            await api.request("/attendance/punch-in", { method: "POST" });
+            await loadAttendance();
+            await loadAll();
+          }}>
+            Punch In to Workday
+          </button>
+        </div>
+      </main>
+    );
+  }
+
+  if (isMember && hasPunchedOut) {
+    return (
+      <main className="auth-shell">
+        <section className="auth-panel">
+          <div className="brand-mark" style={{ fontSize: "2rem", display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "1rem" }}>
+            <FolderKanban size={56} style={{ color: "var(--accent)" }} /> Team Task Manager
+          </div>
+          <h1>Excellent progress, {user.name}!</h1>
+          <p>You have successfully delivered today's objectives. Your workday logs have been filed.</p>
+        </section>
+        <div className="auth-card glass-panel" style={{ display: 'grid', placeItems: 'center', padding: '3.5rem', textAlign: 'center', gap: '2rem' }}>
+          <CheckCircle2 size={48} style={{ color: 'var(--success)' }} />
+          <div>
+            <h2>Workday Complete</h2>
+            <p style={{ color: 'var(--muted)', marginTop: '0.5rem' }}>Punched out successfully.</p>
+            <div style={{ marginTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', background: 'rgba(0,0,0,0.2)', padding: '1rem', borderRadius: '12px' }}>
+              <span style={{ fontSize: '0.9rem', color: 'var(--muted)' }}>Objectives Delivered Today</span>
+              <strong style={{ fontSize: '1.8rem', color: 'var(--text)' }}>{tasksCompletedToday}</strong>
+            </div>
+          </div>
+          <button className="ghost logout" style={{ width: '100%' }} onClick={() => { api.saveToken(""); setUser(null); }}>
+            Logout & Close
+          </button>
+        </div>
+      </main>
+    );
   }
 
   return (
@@ -338,7 +455,7 @@ function App({ routeProjectId = null, routeMemberId = null }) {
         )}
         <nav className="project-list">
           <button className={`nav-link ${viewMode === "explore" ? "active" : ""}`} onClick={() => { setViewMode("explore"); loadDiscoverable(); }}>
-            <Compass size={16} /> Explore Projects
+            <Compass size={16} /> Explore Workspaces
           </button>
           <hr />
           {projects.map((project) => (
@@ -352,6 +469,44 @@ function App({ routeProjectId = null, routeMemberId = null }) {
           ))}
         </nav>
         <div className="sidebar-footer">
+          {isMember && hasPunchedIn && !hasPunchedOut && (
+            <div className="attendance-widget" style={{
+              background: 'rgba(255,255,255,0.02)',
+              border: '1px solid var(--border)',
+              borderRadius: '12px',
+              padding: '1rem',
+              marginBottom: '1rem',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '0.75rem',
+              textAlign: 'center'
+            }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--muted)', textTransform: 'uppercase', fontWeight: 600 }}>Workday Active</span>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text)' }}>
+                  In: {attendance.punch_in ? new Date(attendance.punch_in).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "—"}
+                </span>
+                <span style={{ fontSize: '0.75rem', color: 'var(--accent)', marginTop: '4px' }}>
+                  Objectives: {tasksCompletedToday} / 1
+                </span>
+              </div>
+              <button 
+                className={`primary ${tasksCompletedToday < 1 ? 'outline' : ''}`}
+                style={{ width: '100%', fontSize: '0.85rem', padding: '0.6rem' }}
+                disabled={tasksCompletedToday < 1}
+                onClick={async () => {
+                  try {
+                    await api.request("/attendance/punch-out", { method: "POST" });
+                    await loadAttendance();
+                  } catch (err) {
+                    alert(err.message);
+                  }
+                }}
+              >
+                {tasksCompletedToday < 1 ? "Deliver 1 to Punch Out" : "Punch Out"}
+              </button>
+            </div>
+          )}
           <button className="ghost logout" onClick={() => { api.saveToken(""); setUser(null); }}><LogOut size={16} /> Logout</button>
           <button className="ghost danger" onClick={async () => {
             if (confirm("Are you sure you want to permanently delete your account? This cannot be undone.")) {
@@ -367,12 +522,12 @@ function App({ routeProjectId = null, routeMemberId = null }) {
         {viewMode === "explore" ? (
           <section className="explore-view">
             <header className="project-header">
-              <h1>Explore Projects</h1>
-              <p>Discover and join public projects in your organization.</p>
+              <h1>Explore Workspaces</h1>
+              <p>Discover and request access to active workspaces in your organization.</p>
             </header>
             <div className="discover-grid">
               {discoverable.length === 0 ? (
-                <p>No new projects available to join.</p>
+                <p>No active workspaces available to join at this time.</p>
               ) : (
                 discoverable.map((p) => (
                   <article key={p.id} className="project-card">
@@ -386,7 +541,7 @@ function App({ routeProjectId = null, routeMemberId = null }) {
                     {p.request_status === 'Pending' ? (
                       <button className="primary outline" disabled>Request Sent</button>
                     ) : (
-                      <button className="primary" onClick={() => joinProject(p.id)}>Join Project</button>
+                      <button className="primary" onClick={() => joinProject(p.id)}>Request Access</button>
                     )}
                   </article>
                 ))
@@ -396,8 +551,8 @@ function App({ routeProjectId = null, routeMemberId = null }) {
         ) : !projectDetail ? (
           <section className="empty-state cyberpunk-empty">
             <RadioTower size={42} className="pulse-icon" />
-            <h2>System Standby</h2>
-            <p>Awaiting operator input to initialize project parameters.</p>
+            <h2>Workspace Inactive</h2>
+            <p>Select or create a workspace to begin tracking your sprints.</p>
           </section>
         ) : profileMember ? (
           <section className="profile-page">
@@ -415,21 +570,114 @@ function App({ routeProjectId = null, routeMemberId = null }) {
               </div>
             </div>
             <div className="profile-details">
-              <h3>Operator profile</h3>
-              <p>This operator is assigned to the current project and can collaborate on tasks based on their role.</p>
+              <h3>Contributor Profile</h3>
+              <p>This team member is assigned to this project with role-based access to sprint boards.</p>
             </div>
           </section>
         ) : (
           <>
             <Dashboard dashboard={dashboard} />
+            {user.global_role === "System Admin" && (
+              <section className="admin-tracker-section" style={{ marginBottom: '2.5rem' }}>
+                <h2 style={{ fontSize: '1.25rem', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <Users size={20} /> Team Productivity & Attendance
+                </h2>
+                
+                {adminUsers.filter(u => !u.approved).length > 0 && (
+                  <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1.5rem', border: '1px solid rgba(245, 158, 11, 0.2)', borderRadius: '16px' }}>
+                    <h3 style={{ fontSize: '1rem', color: 'var(--warning)', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <AlertTriangle size={18} /> Registration Requests Pending Approval ({adminUsers.filter(u => !u.approved).length})
+                    </h3>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem' }}>
+                      {adminUsers.filter(u => !u.approved).map(u => (
+                        <div key={u.id} className="user-approval-card" style={{ background: 'rgba(0,0,0,0.2)', padding: '1rem', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div>
+                            <strong style={{ display: 'block' }}>{u.name}</strong>
+                            <span style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>{u.email}</span>
+                          </div>
+                          <div style={{ display: 'flex', gap: '0.5rem' }}>
+                            <button className="primary" style={{ padding: '0.5rem 0.85rem', fontSize: '0.8rem' }} onClick={() => handleApproveUser(u.id)}>Approve</button>
+                            <button className="ghost danger" style={{ padding: '0.5rem 0.85rem', fontSize: '0.8rem' }} onClick={() => handleRejectUser(u.id)}>Decline</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="glass-panel" style={{ padding: '1.5rem', borderRadius: '16px', overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '600px' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                        <th style={{ padding: '0.75rem 1rem', color: 'var(--muted)', fontWeight: '600', fontSize: '0.85rem', textTransform: 'uppercase' }}>Contributor</th>
+                        <th style={{ padding: '0.75rem 1rem', color: 'var(--muted)', fontWeight: '600', fontSize: '0.85rem', textTransform: 'uppercase' }}>Role</th>
+                        <th style={{ padding: '0.75rem 1rem', color: 'var(--muted)', fontWeight: '600', fontSize: '0.85rem', textTransform: 'uppercase' }}>Today's Status</th>
+                        <th style={{ padding: '0.75rem 1rem', color: 'var(--muted)', fontWeight: '600', fontSize: '0.85rem', textTransform: 'uppercase' }}>Punch In/Out</th>
+                        <th style={{ padding: '0.75rem 1rem', color: 'var(--muted)', fontWeight: '600', fontSize: '0.85rem', textTransform: 'uppercase' }}>Objectives Done (Today / Total)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {adminUsers.map(u => {
+                        let statusText = "Away";
+                        let statusColor = "var(--muted)";
+                        if (u.punch_in && !u.punch_out) {
+                          statusText = "Active / Punched In";
+                          statusColor = "var(--success)";
+                        } else if (u.punch_in && u.punch_out) {
+                          statusText = "Completed / Punched Out";
+                          statusColor = "var(--accent)";
+                        } else if (u.global_role === 'System Admin') {
+                          statusText = "Admin Active";
+                          statusColor = "var(--accent)";
+                        }
+                        
+                        return (
+                          <tr key={u.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.02)' }}>
+                            <td style={{ padding: '1rem' }}>
+                              <strong>{u.name}</strong>
+                              <div style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>{u.email}</div>
+                            </td>
+                            <td style={{ padding: '1rem' }}>
+                              <span className={`member-role-badge ${u.global_role.toLowerCase()}`} style={{
+                                padding: '2px 8px',
+                                background: u.global_role === 'System Admin' ? 'rgba(168, 85, 247, 0.15)' : 'rgba(255, 255, 255, 0.05)',
+                                color: u.global_role === 'System Admin' ? 'var(--accent)' : 'var(--muted)',
+                                borderRadius: '12px',
+                                fontSize: '0.75rem',
+                                fontWeight: '600'
+                              }}>{u.global_role}</span>
+                            </td>
+                            <td style={{ padding: '1rem', color: statusColor, fontWeight: '600', fontSize: '0.9rem' }}>
+                              {statusText}
+                            </td>
+                            <td style={{ padding: '1rem', fontSize: '0.85rem', color: 'var(--muted)' }}>
+                              {u.punch_in ? (
+                                <>
+                                  In: {new Date(u.punch_in).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                  {u.punch_out && ` - Out: ${new Date(u.punch_out).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}
+                                </>
+                              ) : "—"}
+                            </td>
+                            <td style={{ padding: '1rem' }}>
+                              <span style={{ fontSize: '0.9rem', fontWeight: '600' }}>{u.done_today}</span>
+                              <span style={{ color: 'var(--muted)', fontSize: '0.85rem' }}> / {u.done_tasks} done total ({u.total_tasks} assigned)</span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            )}
             <header className="project-header">
               <div className="header-info">
-                <span className="eyebrow">{projectDetail.role} workspace</span>
+                <span className="eyebrow">{projectDetail.role} Workspace</span>
                 <h1>{projectDetail.project.name}</h1>
-                <p>{projectDetail.project.description || "No project description yet."}</p>
+                <p>{projectDetail.project.description || "No workspace description yet."}</p>
                 <div className="header-progress">
                   <div className="progress-track"><div className="progress-fill" style={{ width: `${(tasks.filter(t => t.status === "Done").length / Math.max(1, tasks.length)) * 100}%` }}></div></div>
-                  <small>{tasks.filter(t => t.status === "Done").length} of {tasks.length} tasks completed</small>
+                  <small>{tasks.filter(t => t.status === "Done").length} of {tasks.length} objectives delivered</small>
                 </div>
               </div>
               <div className="header-actions">
@@ -463,7 +711,7 @@ function App({ routeProjectId = null, routeMemberId = null }) {
               <div className="task-board-container">
                 <div className="search-bar">
                   <Search size={18} className="search-icon" />
-                  <input type="text" placeholder="Search tasks by title or description..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+                  <input type="text" placeholder="Filter sprint objectives by title or description..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
                   <div className="filters">
                     <Filter size={16} />
                     <select value={priorityFilter} onChange={(e) => setPriorityFilter(e.target.value)}>
@@ -506,33 +754,43 @@ function App({ routeProjectId = null, routeMemberId = null }) {
                         </div>
                       </Panel>
                     )}
-                    <Panel title="Create Task" icon={<Plus size={18} />}>
+                    <Panel title="Create Objective" icon={<Plus size={18} />}>
                       <form className="stack-form" onSubmit={createTask}>
-                        <input name="title" placeholder="Task title" required />
+                        <input name="title" placeholder="Objective title" required />
                         <textarea name="description" placeholder="Description" rows="3" />
                         <input name="dueDate" type="date" />
                         <select name="priority" defaultValue="Medium">{priorities.map((item) => <option key={item}>{item}</option>)}</select>
-                        <select name="assignedTo" defaultValue="">
-                          <option value="">Unassigned</option>
-                          {projectDetail.members.map((member) => <option value={member.id} key={member.id}>{member.name}</option>)}
-                        </select>
-                        <button className="primary" type="submit">Add task</button>
+                        <label style={{ display: 'grid', gap: '0.4rem', fontSize: '0.85rem', color: 'var(--muted)' }}>
+                          Primary Assignee
+                          <select name="assignedTo" defaultValue="">
+                            <option value="">Unassigned</option>
+                            {projectDetail.members.map((member) => <option value={member.id} key={member.id}>{member.name}</option>)}
+                          </select>
+                        </label>
+                        <label style={{ display: 'grid', gap: '0.4rem', fontSize: '0.85rem', color: 'var(--muted)' }}>
+                          Backup Assignee (Optional)
+                          <select name="backupAssignedTo" defaultValue="">
+                            <option value="">No Backup Assignee</option>
+                            {projectDetail.members.map((member) => <option value={member.id} key={member.id}>{member.name}</option>)}
+                          </select>
+                        </label>
+                        <button className="primary" type="submit">Create Objective</button>
                       </form>
                     </Panel>
-                    <Panel title="Add Member" icon={<UserPlus size={18} />}>
+                    <Panel title="Invite Contributor" icon={<UserPlus size={18} />}>
                       <form className="stack-form" onSubmit={addMember}>
                         <select name="email" required defaultValue="">
-                          <option value="" disabled>Select a user to invite...</option>
+                          <option value="" disabled>Select contributor to invite...</option>
                           {allUsers.filter(u => !projectDetail.members.some(m => m.id === u.id)).map(u => (
                             <option key={u.id} value={u.email}>{u.name} ({u.email})</option>
                           ))}
                         </select>
-                        <button className="primary" type="submit">Add to project</button>
+                        <button className="primary" type="submit">Add to Workspace</button>
                       </form>
                     </Panel>
                   </>
                 )}
-                <Panel title="Team" icon={<Users size={18} />}>
+                <Panel title="Workspace Directory" icon={<Users size={18} />}>
                   <div className="member-list">
                     {projectDetail.members.map((member) => (
                       <div className="member" key={member.id} onClick={() => { setActiveProfileId(member.id); navigate(`/projects/${activeId}/profile/${member.id}`); }}>
@@ -577,10 +835,10 @@ function App({ routeProjectId = null, routeMemberId = null }) {
 function Dashboard({ dashboard }) {
   const summary = dashboard?.summary || {};
   const cards = [
-    ["Total tasks", summary.total_tasks || 0, <ClipboardList size={18} />],
+    ["Total objectives", summary.total_tasks || 0, <ClipboardList size={18} />],
     ["In progress", summary.in_progress || 0, <FolderKanban size={18} />],
-    ["Done", summary.done || 0, <CheckCircle2 size={18} />],
-    ["Overdue", summary.overdue || 0, <AlertTriangle size={18} />],
+    ["Delivered", summary.done || 0, <CheckCircle2 size={18} />],
+    ["Breached", summary.overdue || 0, <AlertTriangle size={18} />],
   ];
   return (
     <section className="dashboard-strip">
@@ -590,7 +848,7 @@ function Dashboard({ dashboard }) {
         </article>
       ))}
       <article className="metric wide">
-        <Users size={18} /><span>Tasks per user</span>
+        <Users size={18} /><span>Workloads per Contributor</span>
         <div className="user-bars">
           {(dashboard?.perUser || []).map((item) => <i key={item.name} style={{ "--w": `${Math.max(8, item.count * 16)}px` }}>{item.name}: {item.count}</i>)}
         </div>
@@ -617,7 +875,7 @@ function TaskColumn({ status, tasks, onStatus, onDelete }) {
       <header><h2>{status}</h2><span>{tasks.length}</span></header>
       <div className="task-stack">
         {tasks.map((task) => <TaskCard key={task.id} task={task} onStatus={onStatus} onDelete={onDelete} />)}
-        {tasks.length === 0 && <div className="empty-column-state">Drop tasks here</div>}
+        {tasks.length === 0 && <div className="empty-column-state">Drag & drop objectives here</div>}
       </div>
     </section>
   );
@@ -650,6 +908,11 @@ function TaskCard({ task, onStatus, onDelete }) {
         <span>{task.priority}</span>
         <span>{formattedDate}</span>
         <span>{task.assignee_name || "Unassigned"}</span>
+        {task.backup_assignee_name && (
+          <span style={{ border: '1px dashed var(--accent)', color: 'var(--accent)' }}>
+            Backup: {task.backup_assignee_name}
+          </span>
+        )}
       </div>
       <select value={task.status} onChange={(event) => onStatus(task, event.target.value)}>
         {statuses.map((status) => <option key={status}>{status}</option>)}
@@ -739,17 +1002,17 @@ function SettingsModal({ api, onClose }) {
     <div className="modal-backdrop">
       <div className="modal-content glass-panel" style={{ maxWidth: '500px' }}>
         <div className="modal-header">
-          <h2><Settings2 size={18} /> System Configurations</h2>
+          <h2><Settings2 size={18} /> Workspace Preferences</h2>
           <button className="icon-button" onClick={onClose}>&times;</button>
         </div>
         <form className="stack-form" onSubmit={submit}>
-          <label>Operator Name<input value={name} onChange={e => setName(e.target.value)} required /></label>
+          <label>Display Name<input value={name} onChange={e => setName(e.target.value)} required /></label>
           <label>Update Password<input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Leave blank to keep current" /></label>
           <label>
-            OpenAI API Key (Required for Autonomous Ops)
+            OpenAI API Token (Autonomous Agent Integration)
             <input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="sk-..." />
           </label>
-          <button className="primary" type="submit">Save Configurations</button>
+          <button className="primary" type="submit">Save Preferences</button>
         </form>
       </div>
     </div>

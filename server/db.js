@@ -40,11 +40,13 @@ export async function initDb() {
       password_hash TEXT NOT NULL,
       global_role TEXT NOT NULL DEFAULT 'Member' CHECK (global_role IN ('System Admin', 'Member')),
       api_key TEXT,
+      approved BOOLEAN NOT NULL DEFAULT FALSE,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
 
     ALTER TABLE users ADD COLUMN IF NOT EXISTS global_role TEXT NOT NULL DEFAULT 'Member' CHECK (global_role IN ('System Admin', 'Member'));
     ALTER TABLE users ADD COLUMN IF NOT EXISTS api_key TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS approved BOOLEAN NOT NULL DEFAULT FALSE;
 
     CREATE TABLE IF NOT EXISTS projects (
       id SERIAL PRIMARY KEY,
@@ -79,9 +81,21 @@ export async function initDb() {
       priority TEXT NOT NULL CHECK (priority IN ('Low', 'Medium', 'High')),
       status TEXT NOT NULL CHECK (status IN ('To Do', 'In Progress', 'Done')) DEFAULT 'To Do',
       assigned_to INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      backup_assigned_to INTEGER REFERENCES users(id) ON DELETE SET NULL,
       created_by INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    ALTER TABLE tasks ADD COLUMN IF NOT EXISTS backup_assigned_to INTEGER REFERENCES users(id) ON DELETE SET NULL;
+
+    CREATE TABLE IF NOT EXISTS attendance (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      date DATE NOT NULL DEFAULT CURRENT_DATE,
+      punch_in TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      punch_out TIMESTAMPTZ,
+      UNIQUE (user_id, date)
     );
 
     CREATE INDEX IF NOT EXISTS idx_project_members_user ON project_members(user_id);
