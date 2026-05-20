@@ -1,140 +1,140 @@
-# Team Task Manager
+# Team Task Manager (TTM)
 
-A clean and responsive project collaboration app built with React, Vite, Express, and PostgreSQL.
+An enterprise-grade, high-performance project collaboration and sprint management platform designed for hyper-growth engineering teams. Built with **React**, **Vite**, **Express (Node.js)**, and **PostgreSQL**.
 
-## Overview
+---
 
-Team Task Manager enables teams to create projects, invite members, assign tasks, and track work progress with role-based access.
+## 🌟 Key Capabilities & Workflows
 
-### Core capabilities
+### 1. ⏱️ Workday Attendance & Accountability Flow
+* **Verification Gate:** Standard members are presented with a "Workday Offline" gate upon logging in. They must **Punch In** to activate their workday before accessing project sprint boards or updating objectives.
+* **Delivery Guard:** To prevent premature sign-offs, TTM enforces a strict productivity rule: members must complete and deliver at least **one objective** status change to `Done` today before they are permitted to **Punch Out**.
 
-- Signup and login with JWT authentication
-- Admin and member access levels within each project
-- Create and manage projects, tasks, and team members
-- Track status for tasks in columns: `To Do`, `In Progress`, and `Done`
-- Dashboard metrics for task counts and overdue items
-- Responsive UI that works on desktop and mobile
+### 2. 🛡️ Multi-Tier Role-Based Access Control (RBAC)
+* **System Administrator:** Oversees global workspace operations, creates new projects, and manages pending member registration requests via a dedicated administrative control panel.
+* **Project Administrator:** Configures project preferences, invites contributors, demotes/promotes project members, and creates or deletes tasks (sprint objectives).
+* **Project Contributor (Member):** Focuses on execution. They can view tasks assigned to them (or where they are set as backup), transition task statuses on the Kanban board, and track their daily logs.
 
-## Features
+### 3. 🎯 Task & Backup Assignment
+* **Dual Assignee System:** Tasks support both a **Primary Assignee** and an optional **Backup Assignee** to guarantee clear ownership and fallback redundancy for critical path sprint deliverables.
 
-- User authentication (signup/login)
-- Project creation and project list navigation
-- Task creation, assignment, due dates, and priority settings
-- Role badges for admins and members in the UI
-- Member list with role labels and admin management controls
-- Dashboard summary of total, in-progress, done, and overdue tasks
-- In-memory DB fallback for local development when no PostgreSQL URL exists
+### 4. 💾 Hybrid Database Layer
+* **Production Pooling:** Utilizes connection pooling via `pg` for high-throughput PostgreSQL queries in production.
+* **Zero-Setup Local Development:** Automatically detects if `DATABASE_URL` is absent and falls back to `pg-mem` (an in-memory PostgreSQL engine), allowing developers to clone and run the app locally in one click without configuring a database.
 
-## Tech stack
+---
 
-- Frontend: React, Vite, CSS
-- Backend: Node.js, Express
-- Database: PostgreSQL (preferred), pg-mem local fallback
-- Auth: JWT, bcrypt
-- Validation: Zod
+## 🛠️ Technology Stack
 
-## Project structure
+* **Frontend:** React 19, React Router v7, Lucide Icons, Vanilla CSS (Premium Glassmorphism Design System)
+* **Backend:** Node.js, Express 5, JWT Authentication, bcryptjs
+* **Validation & Safety:** Zod (Type-safe input schema validation)
+* **Database:** PostgreSQL / pg-mem fallback engine
+* **Bundler & Server:** Vite, nodemon, concurrently
 
-- `src/main.jsx` — React application entry point
-- `src/styles.css` — frontend styling and responsive layout
-- `server/index.js` — Express API server and static file serving
-- `server/db.js` — database initialization and query helper
-- `vite.config.js` — development proxy configuration
-- `railway.json` — deploy settings for hosted environments
+---
 
-## Local setup
+## 🏗️ Project Architecture
 
-1. Open terminal in the project folder.
-2. Install dependencies:
+```mermaid
+graph TD
+    Client[React Frontend / Vite] -->|Fetch APIs with JWT| Server[Express API Server]
+    Server -->|Router Validation: Zod| DB_Router{DB Configuration}
+    DB_Router -->|DATABASE_URL exists| PG[(PostgreSQL Production)]
+    DB_Router -->|No DATABASE_URL| MemDB[(pg-mem In-Memory DB)]
+```
 
+---
+
+## 🚦 API Endpoints
+
+### 🔐 Authentication & Session
+* `POST /api/auth/signup` - Register standard users (unapproved) or system admins (requires admin key).
+* `POST /api/auth/login` - Authenticate users and return session tokens.
+* `GET /api/me` - Retrieve current session details.
+* `GET /api/me/settings` / `PUT /api/me/settings` - Manage account display name, password, or API key.
+* `DELETE /api/me` - Delete account.
+
+### 📂 Workspaces & Projects
+* `GET /api/projects` - List all projects associated with the user's role.
+* `POST /api/projects` - Create a new project (System Admin only).
+* `GET /api/projects/discover` - Browse public/discoverable workspaces.
+* `POST /api/projects/:id/join` - Request access to a project.
+* `GET /api/projects/:id` - Retrieve project detail & directory list.
+
+### 👥 Membership & Access Control
+* `POST /api/projects/:id/members` - Invite a contributor (Project Admin only).
+* `PATCH /api/projects/:id/members/:userId/role` - Update role (Project Admin only).
+* `DELETE /api/projects/:id/members/:userId` - Remove a member (Project Admin only).
+* `GET /api/projects/:id/requests` - List pending project join requests.
+* `POST /api/projects/:id/requests/:userId/approve` - Approve join request.
+* `POST /api/projects/:id/requests/:userId/reject` - Decline join request.
+
+### 📋 Sprints & Objectives
+* `GET /api/projects/:id/tasks` - List tasks filterable by role and assignment.
+* `POST /api/projects/:id/tasks` - Create a sprint objective.
+* `PATCH /api/projects/:id/tasks/:taskId` - Update task details or status.
+* `DELETE /api/projects/:id/tasks/:taskId` - Delete task (Project Admin only).
+
+### ⏱️ Attendance & Metrics
+* `GET /api/dashboard` - Get dashboard workload and state analytics.
+* `GET /api/attendance/today` - Retrieve today's punch-in/out log and daily objectives count.
+* `POST /api/attendance/punch-in` - Begin workday session.
+* `POST /api/attendance/punch-out` - Complete workday session (verifies at least 1 objective completed).
+
+### 👑 System Admin Dashboard
+* `GET /api/admin/users` - View global team productivity directory, attendance status, and total workload.
+* `POST /api/admin/users/:userId/approve` - Approve new registrations.
+* `POST /api/admin/users/:userId/reject` - Decline and delete pending accounts.
+
+---
+
+## 💻 Local Development Setup
+
+Follow these steps to run the application on your local machine:
+
+### 1. Prerequisites
+Ensure you have **Node.js (>= 20)** installed.
+
+### 2. Installation
+Clone the repository and install the project dependencies:
 ```bash
 npm install
 ```
 
-3. Copy environment variables:
-
-```powershell
+### 3. Environment Variables Configuration
+Copy the template to create a new environment variable file:
+```bash
+# Windows PowerShell
 copy .env.example .env
+
+# macOS / Linux
+cp .env.example .env
 ```
-
-4. Edit `.env` and set the values:
-
+Open `.env` and fill in the values:
 ```text
 DATABASE_URL=postgresql://user:password@localhost:5432/team_task_manager
-JWT_SECRET=your-long-random-secret
+JWT_SECRET=your-secure-random-jwt-signing-key
 PORT=8080
 ```
+*Note: If you leave `DATABASE_URL` empty, the system automatically runs using `pg-mem` as a fallback database.*
 
-5. Start the app in development mode:
-
+### 4. Running the App
+Start both the Vite client server and Node server concurrently:
 ```bash
 npm run dev
 ```
+Open your browser and navigate to: **`http://localhost:5173`**
 
-6. Open the frontend at `http://localhost:5173`.
+---
 
-### Production build locally
+## 🚀 Deployment (Railway / Production)
 
-```bash
-npm run build
-npm start
-```
-
-Then open `http://localhost:8080`.
-
-## Environment variables
-
-- `DATABASE_URL` — PostgreSQL connection string
-- `JWT_SECRET` — JWT signing secret
-- `PORT` — server port (default `8080`)
-- `NODE_ENV` — set to `production` for production deploy
-
-## Deployment
-
-1. Push the repository to your Git provider.
-2. Configure a PostgreSQL database and capture its connection URL.
-3. Set environment variables in your hosting platform:
-
-```text
-DATABASE_URL=<your-postgres-url>
-JWT_SECRET=<long-random-secret>
-NODE_ENV=production
-```
-
-4. Use the commands below to build and start the service:
-
-```bash
-npm install && npm run build
-npm start
-```
-
-## Usage flow
-
-1. Signup and login.
-2. Create a new project.
-3. Invite members by email to the project.
-4. Create tasks, assign them, and set priorities.
-5. Move tasks through the Kanban-style status board.
-6. Monitor team progress in the dashboard.
-
-## API endpoints
-
-- `POST /api/auth/signup`
-- `POST /api/auth/login`
-- `GET /api/me`
-- `GET /api/projects`
-- `POST /api/projects`
-- `GET /api/projects/:id`
-- `POST /api/projects/:id/members`
-- `DELETE /api/projects/:id/members/:userId`
-- `GET /api/projects/:id/tasks`
-- `POST /api/projects/:id/tasks`
-- `PATCH /api/projects/:id/tasks/:taskId`
-- `DELETE /api/projects/:id/tasks/:taskId`
-- `GET /api/dashboard`
-
-## Notes
-
-- Admin controls are available only to project admins.
-- Members can view tasks assigned to them and update task status.
-- In production, the backend serves the React app from `dist/` and handles API requests under `/api`.
+1. Push your repository to GitHub.
+2. Spin up a new project on **Railway** and choose **Provision PostgreSQL**.
+3. Link your GitHub repository as a web service card.
+4. Set the environment variables in the Railway dashboard:
+   - `DATABASE_URL`: `${{Postgres.DATABASE_URL}}`
+   - `JWT_SECRET`: `your-jwt-production-secret`
+   - `NODE_ENV`: `production`
+5. Railway will automatically detect the entry point, build, and deploy the application. Generate a public domain under **Settings -> Networking** to access the live app.
