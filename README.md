@@ -11,7 +11,7 @@ An enterprise-grade, high-performance project collaboration and sprint managemen
 * **Delivery Guard:** To prevent premature sign-offs, TTM enforces a strict productivity rule: members must complete and deliver at least **one objective** status change to `Done` today before they are permitted to **Punch Out**.
 
 ### 2. 🛡️ Multi-Tier Role-Based Access Control (RBAC)
-* **System Administrator:** Oversees global workspace operations, creates new projects, and manages pending member registration requests via a dedicated administrative control panel.
+* **System Administrator:** Oversees global workspace operations, creates new projects, and monitors team productivity stats.
 * **Project Administrator:** Configures project preferences, invites contributors, demotes/promotes project members, and creates or deletes tasks (sprint objectives).
 * **Project Contributor (Member):** Focuses on execution. They can view tasks assigned to them (or where they are set as backup), transition task statuses on the Kanban board, and track their daily logs.
 
@@ -49,7 +49,7 @@ graph TD
 ## 🚦 API Endpoints
 
 ### 🔐 Authentication & Session
-* `POST /api/auth/signup` - Register standard users (unapproved) or system admins (requires admin key).
+* `POST /api/auth/signup` - Register standard users or system admins (requires admin key).
 * `POST /api/auth/login` - Authenticate users and return session tokens.
 * `GET /api/me` - Retrieve current session details.
 * `GET /api/me/settings` / `PUT /api/me/settings` - Manage account display name, password, or API key.
@@ -84,8 +84,6 @@ graph TD
 
 ### 👑 System Admin Dashboard
 * `GET /api/admin/users` - View global team productivity directory, attendance status, and total workload.
-* `POST /api/admin/users/:userId/approve` - Approve new registrations.
-* `POST /api/admin/users/:userId/reject` - Decline and delete pending accounts.
 
 ---
 

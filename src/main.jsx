@@ -64,22 +64,15 @@ function AuthScreen({ api, onAuthed }) {
   const [form, setForm] = useState({ name: "", email: "", password: "", globalRole: "Member", adminKey: "" });
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [successMessage, setSuccessMessage] = useState("");
 
   async function submit(event) {
     event.preventDefault();
     setError("");
-    setSuccessMessage("");
     try {
       const payload = mode === "signup" ? form : { email: form.email, password: form.password };
       const data = await api.request(`/auth/${mode}`, { method: "POST", body: JSON.stringify(payload) });
-      if (data.pending) {
-        setSuccessMessage(data.message);
-        setMode("login");
-      } else {
-        api.saveToken(data.token);
-        onAuthed(data.user);
-      }
+      api.saveToken(data.token);
+      onAuthed(data.user);
     } catch (err) {
       setError(err.message);
     }
@@ -96,24 +89,9 @@ function AuthScreen({ api, onAuthed }) {
       </section>
       <form className="auth-card" onSubmit={submit}>
         <div className="segmented">
-          <button type="button" className={mode === "login" ? "active" : ""} onClick={() => { setMode("login"); setSuccessMessage(""); setError(""); }}>Login</button>
-          <button type="button" className={mode === "signup" ? "active" : ""} onClick={() => { setMode("signup"); setSuccessMessage(""); setError(""); }}>Signup</button>
+          <button type="button" className={mode === "login" ? "active" : ""} onClick={() => { setMode("login"); setError(""); }}>Login</button>
+          <button type="button" className={mode === "signup" ? "active" : ""} onClick={() => { setMode("signup"); setError(""); }}>Signup</button>
         </div>
-        {successMessage && (
-          <div style={{
-            color: "var(--success)",
-            fontSize: "0.85rem",
-            lineHeight: "1.4",
-            margin: "1rem 0",
-            background: "rgba(16, 185, 129, 0.1)",
-            padding: "0.85rem 1rem",
-            borderRadius: "12px",
-            border: "1px solid rgba(16, 185, 129, 0.15)",
-            textAlign: "center"
-          }}>
-            {successMessage}
-          </div>
-        )}
         {mode === "signup" && (
           <>
             <label>Name<input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required /></label>
@@ -206,27 +184,7 @@ function App({ routeProjectId = null, routeMemberId = null }) {
     }
   }
 
-  async function handleApproveUser(userId) {
-    try {
-      await api.request(`/admin/users/${userId}/approve`, { method: "POST" });
-      await loadAdminUsers();
-      setToast("User Approved!");
-    } catch (err) {
-      alert("Error approving user: " + err.message);
-    }
-  }
 
-  async function handleRejectUser(userId) {
-    if (confirm("Are you sure you want to decline this registration request? This will delete the pending user account.")) {
-      try {
-        await api.request(`/admin/users/${userId}/reject`, { method: "POST" });
-        await loadAdminUsers();
-        setToast("User Request Declined");
-      } catch (err) {
-        alert("Error declining user: " + err.message);
-      }
-    }
-  }
 
   async function loadDiscoverable() {
     const data = await api.request("/projects/discover");
@@ -605,27 +563,7 @@ function App({ routeProjectId = null, routeMemberId = null }) {
                   <Users size={20} /> Team Productivity & Attendance
                 </h2>
                 
-                {adminUsers.filter(u => !u.approved).length > 0 && (
-                  <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1.5rem', border: '1px solid rgba(245, 158, 11, 0.2)', borderRadius: '16px' }}>
-                    <h3 style={{ fontSize: '1rem', color: 'var(--warning)', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <AlertTriangle size={18} /> Registration Requests Pending Approval ({adminUsers.filter(u => !u.approved).length})
-                    </h3>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem' }}>
-                      {adminUsers.filter(u => !u.approved).map(u => (
-                        <div key={u.id} className="user-approval-card" style={{ background: 'rgba(0,0,0,0.2)', padding: '1rem', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <div>
-                            <strong style={{ display: 'block' }}>{u.name}</strong>
-                            <span style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>{u.email}</span>
-                          </div>
-                          <div style={{ display: 'flex', gap: '0.5rem' }}>
-                            <button className="primary" style={{ padding: '0.5rem 0.85rem', fontSize: '0.8rem' }} onClick={() => handleApproveUser(u.id)}>Approve</button>
-                            <button className="ghost danger" style={{ padding: '0.5rem 0.85rem', fontSize: '0.8rem' }} onClick={() => handleRejectUser(u.id)}>Decline</button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+
 
                 <div className="glass-panel" style={{ padding: '1.5rem', borderRadius: '16px', overflowX: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '600px' }}>

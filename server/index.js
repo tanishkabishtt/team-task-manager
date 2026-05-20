@@ -119,17 +119,10 @@ app.post("/api/auth/signup", validate(signupSchema), async (req, res) => {
       return res.status(403).json({ error: "Invalid Admin Access Key" });
     }
     const hash = await bcrypt.hash(req.body.password, 12);
-    const approved = isSysAdmin ? true : false;
     const { rows } = await query(
-      "INSERT INTO users (name, email, password_hash, global_role, approved) VALUES ($1, $2, $3, $4, $5) RETURNING id, name, email, global_role, approved",
-      [req.body.name, req.body.email, hash, req.body.globalRole, approved],
+      "INSERT INTO users (name, email, password_hash, global_role, approved) VALUES ($1, $2, $3, $4, TRUE) RETURNING id, name, email, global_role, approved",
+      [req.body.name, req.body.email, hash, req.body.globalRole],
     );
-    if (!approved) {
-      return res.status(201).json({
-        message: "Registration successful! Your account is pending administrator approval.",
-        pending: true
-      });
-    }
     sendAuth(res.status(201), rows[0]);
   } catch (error) {
     if (error.code === "23505") return res.status(409).json({ error: "Email is already registered" });

@@ -4,26 +4,25 @@ Team Task Manager - Key Functionalities List:
 2. JWT-based session security
 3. Password hashing using bcryptjs
 4. System Admin registration security key (Admin123)
-5. User account approval queue
-6. Daily Workday Punch-In dashboard gate
-7. Objective completion check before Punch-Out
-8. Workspace and project creation
-9. Public workspace directory discovery
-10. Project access requests
-11. Workspace progress tracking
-12. Kanban Board (To Do, In Progress, Done)
-13. Interactive task drag-and-drop
-14. Primary and Backup task assignment
-15. Task due date and priority labeling
-16. Real-time task search and filtering
-17. Active member directory
-18. Member invitation by email
-19. Project member role updating
-20. Project member removal
-21. Workspace join request approval/rejection
-22. System Admin workspace management dashboard
-23. Real-time user productivity directory
-24. Daily attendance logs tracker
-25. Workspace workload metrics dashboard
-26. User workload distribution graphs
-27. Settings profile editor
+5. Daily Workday Punch-In dashboard gate
+6. Objective completion check before Punch-Out
+7. Workspace and project creation
+8. Public workspace directory discovery
+9. Project access requests
+10. Workspace progress tracking
+11. Kanban Board (To Do, In Progress, Done)
+12. Interactive task drag-and-drop
+13. Primary and Backup task assignment
+14. Task due date and priority labeling
+15. Real-time task search and filtering
+16. Active member directory
+17. Member invitation by email
+18. Project member role updating
+19. Project member removal
+20. Workspace join request approval/rejection
+21. System Admin workspace management dashboard
+22. Real-time user productivity directory
+23. Daily attendance logs tracker
+24. Workspace workload metrics dashboard
+25. User workload distribution graphs
+26. Settings profile editor
