@@ -124,6 +124,12 @@ app.post("/api/auth/signup", validate(signupSchema), async (req, res) => {
       "INSERT INTO users (name, email, password_hash, global_role, approved) VALUES ($1, $2, $3, $4, $5) RETURNING id, name, email, global_role, approved",
       [req.body.name, req.body.email, hash, req.body.globalRole, approved],
     );
+    if (!approved) {
+      return res.status(201).json({
+        message: "Registration successful! Your account is pending administrator approval.",
+        pending: true
+      });
+    }
     sendAuth(res.status(201), rows[0]);
   } catch (error) {
     if (error.code === "23505") return res.status(409).json({ error: "Email is already registered" });
@@ -404,12 +410,18 @@ app.patch("/api/projects/:id/tasks/:taskId", requireAuth, requireMember, async (
     next.backup_assigned_to = parsed.data.backupAssignedTo;
   }
   if (next.assigned_to) {
-    const assignee = await membership(req.projectId, Number(next.assigned_to));
-    if (!assignee) return res.status(400).json({ error: "Assignee must be a project member" });
+    const assigneeUser = await query("SELECT global_role FROM users WHERE id = $1", [next.assigned_to]);
+    if (assigneeUser.rows[0]?.global_role !== "System Admin") {
+      const assignee = await membership(req.projectId, Number(next.assigned_to));
+      if (!assignee) return res.status(400).json({ error: "Assignee must be a project member" });
+    }
   }
   if (next.backup_assigned_to) {
-    const backupAssignee = await membership(req.projectId, Number(next.backup_assigned_to));
-    if (!backupAssignee) return res.status(400).json({ error: "Backup Assignee must be a project member" });
+    const backupAssigneeUser = await query("SELECT global_role FROM users WHERE id = $1", [next.backup_assigned_to]);
+    if (backupAssigneeUser.rows[0]?.global_role !== "System Admin") {
+      const backupAssignee = await membership(req.projectId, Number(next.backup_assigned_to));
+      if (!backupAssignee) return res.status(400).json({ error: "Backup Assignee must be a project member" });
+    }
   }
   const { rows } = await query(
     `UPDATE tasks SET title = $1, description = $2, due_date = $3, priority = $4, status = $5,

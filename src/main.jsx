@@ -64,15 +64,22 @@ function AuthScreen({ api, onAuthed }) {
   const [form, setForm] = useState({ name: "", email: "", password: "", globalRole: "Member", adminKey: "" });
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("");
 
   async function submit(event) {
     event.preventDefault();
     setError("");
+    setSuccessMessage("");
     try {
       const payload = mode === "signup" ? form : { email: form.email, password: form.password };
       const data = await api.request(`/auth/${mode}`, { method: "POST", body: JSON.stringify(payload) });
-      api.saveToken(data.token);
-      onAuthed(data.user);
+      if (data.pending) {
+        setSuccessMessage(data.message);
+        setMode("login");
+      } else {
+        api.saveToken(data.token);
+        onAuthed(data.user);
+      }
     } catch (err) {
       setError(err.message);
     }
@@ -89,9 +96,24 @@ function AuthScreen({ api, onAuthed }) {
       </section>
       <form className="auth-card" onSubmit={submit}>
         <div className="segmented">
-          <button type="button" className={mode === "login" ? "active" : ""} onClick={() => setMode("login")}>Login</button>
-          <button type="button" className={mode === "signup" ? "active" : ""} onClick={() => setMode("signup")}>Signup</button>
+          <button type="button" className={mode === "login" ? "active" : ""} onClick={() => { setMode("login"); setSuccessMessage(""); setError(""); }}>Login</button>
+          <button type="button" className={mode === "signup" ? "active" : ""} onClick={() => { setMode("signup"); setSuccessMessage(""); setError(""); }}>Signup</button>
         </div>
+        {successMessage && (
+          <div style={{
+            color: "var(--success)",
+            fontSize: "0.85rem",
+            lineHeight: "1.4",
+            margin: "1rem 0",
+            background: "rgba(16, 185, 129, 0.1)",
+            padding: "0.85rem 1rem",
+            borderRadius: "12px",
+            border: "1px solid rgba(16, 185, 129, 0.15)",
+            textAlign: "center"
+          }}>
+            {successMessage}
+          </div>
+        )}
         {mode === "signup" && (
           <>
             <label>Name<input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required /></label>
@@ -930,50 +952,6 @@ function Panel({ title, icon, children }) {
   );
 }
 
-
-
-function TelemetryDashboard({ dashboard }) {
-  const summary = dashboard?.summary || {};
-  const [logs, setLogs] = useState([]);
-  
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const actions = ["[SYS] Cluster node optimized", "[AI] Model degradation < 0.01%", "[NET] Latency steady at 12ms", "[SEC] No anomalies detected", "[AUTH] Handshake successful", "[SYS] Workload balanced"];
-      setLogs(prev => [actions[Math.floor(Math.random() * actions.length)], ...prev].slice(0, 5));
-    }, 3500);
-    return () => clearInterval(interval);
-  }, []);
-
-  const cards = [
-    ["System Uptime", "99.99%", <RadioTower size={18} />],
-    ["Network Latency", "12ms", <Activity size={18} />],
-    ["Active Tasks", summary.total_tasks || 0, <ClipboardList size={18} />],
-    ["Cluster Load", `${Math.floor(Math.random() * 20) + 30}%`, <Cpu size={18} />],
-  ];
-
-  return (
-    <section className="telemetry-dashboard">
-      <div className="telemetry-metrics">
-        {cards.map(([label, value, icon]) => (
-          <article className="metric-glass" key={label}>
-            <div className="icon-glow">{icon}</div>
-            <div>
-              <span>{label}</span>
-              <strong>{value}</strong>
-            </div>
-          </article>
-        ))}
-      </div>
-      <div className="telemetry-terminal">
-        <div className="terminal-header"><TerminalSquare size={14} /> AI Operations Log</div>
-        <div className="terminal-feed">
-          {logs.map((log, i) => <p key={i} style={{ opacity: 1 - i * 0.2 }}>{log}</p>)}
-          {logs.length === 0 && <p>Awaiting initialization...</p>}
-        </div>
-      </div>
-    </section>
-  );
-}
 
 function SettingsModal({ api, onClose }) {
   const [name, setName] = useState("");
