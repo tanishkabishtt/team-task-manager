@@ -147,7 +147,6 @@ function App({ routeProjectId = null, routeMemberId = null }) {
   const [viewMode, setViewMode] = useState("workspace");
   const [discoverable, setDiscoverable] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [requests, setRequests] = useState([]);
   const [allUsers, setAllUsers] = useState([]);
   const [toast, setToast] = useState("");
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
@@ -219,10 +218,8 @@ function App({ routeProjectId = null, routeMemberId = null }) {
     setTasks(taskData.tasks);
     
     if (detail?.role === "Admin" || user?.global_role === "System Admin") {
-      api.request(`/projects/${projectId}/requests`).then(res => setRequests(res?.requests || []));
       api.request(`/users`).then(res => setAllUsers(res?.users || []));
     } else {
-      setRequests([]);
       setAllUsers([]);
     }
   }
@@ -271,14 +268,8 @@ function App({ routeProjectId = null, routeMemberId = null }) {
 
   async function joinProject(id) {
     await api.request(`/projects/${id}/join`, { method: "POST" });
-    await loadDiscoverable();
-    setToast("Request Sent!");
-  }
-
-  async function handleRequest(userId, action) {
-    await api.request(`/projects/${activeId}/requests/${userId}/${action}`, { method: "POST" });
-    await loadProject(activeId);
-    setToast(`Request ${action}d`);
+    await loadAll(id);
+    setToast("Joined Workspace!");
   }
 
   async function addMember(event) {
@@ -518,11 +509,7 @@ function App({ routeProjectId = null, routeMemberId = null }) {
                       <span>{p.task_count} tasks</span>
                       <span>By {p.creator_name}</span>
                     </div>
-                    {p.request_status === 'Pending' ? (
-                      <button className="primary outline" disabled>Request Sent</button>
-                    ) : (
-                      <button className="primary" onClick={() => joinProject(p.id)}>Request Access</button>
-                    )}
+                    <button className="primary" onClick={() => joinProject(p.id)}>Join Workspace</button>
                   </article>
                 ))
               )}
@@ -699,21 +686,7 @@ function App({ routeProjectId = null, routeMemberId = null }) {
               <aside className="control-rail">
                 {isAdmin && (
                   <>
-                    {requests.length > 0 && (
-                      <Panel title="Join Requests" icon={<UserPlus size={18} />}>
-                        <div className="member-list">
-                          {requests.map(req => (
-                            <div className="member" key={req.id}>
-                              <span>{req.name}<small>{req.email}</small></span>
-                              <div className="member-actions">
-                                <button className="icon-button" onClick={() => handleRequest(req.id, 'approve')} aria-label="Approve" title="Approve"><CheckCircle2 size={15} color="var(--success)" /></button>
-                                <button className="icon-button danger" onClick={() => handleRequest(req.id, 'reject')} aria-label="Reject" title="Reject"><Trash2 size={15} /></button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </Panel>
-                    )}
+
                     <Panel title="Create Objective" icon={<Plus size={18} />}>
                       <form className="stack-form" onSubmit={createTask}>
                         <input name="title" placeholder="Objective title" required />

@@ -40,13 +40,13 @@ export async function initDb() {
       password_hash TEXT NOT NULL,
       global_role TEXT NOT NULL DEFAULT 'Member' CHECK (global_role IN ('System Admin', 'Member')),
       api_key TEXT,
-      approved BOOLEAN NOT NULL DEFAULT FALSE,
+      approved BOOLEAN NOT NULL DEFAULT TRUE,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
 
     ALTER TABLE users ADD COLUMN IF NOT EXISTS global_role TEXT NOT NULL DEFAULT 'Member' CHECK (global_role IN ('System Admin', 'Member'));
     ALTER TABLE users ADD COLUMN IF NOT EXISTS api_key TEXT;
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS approved BOOLEAN NOT NULL DEFAULT FALSE;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS approved BOOLEAN NOT NULL DEFAULT TRUE;
 
     CREATE TABLE IF NOT EXISTS projects (
       id SERIAL PRIMARY KEY,
@@ -101,5 +101,7 @@ export async function initDb() {
     CREATE INDEX IF NOT EXISTS idx_project_members_user ON project_members(user_id);
     CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id);
     CREATE INDEX IF NOT EXISTS idx_tasks_assigned_to ON tasks(assigned_to);
+
+    UPDATE users SET approved = TRUE WHERE approved = FALSE;
   `);
 }

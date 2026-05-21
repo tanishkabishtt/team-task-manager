@@ -74,7 +74,6 @@ async function requireAuth(req, res, next) {
     const payload = jwt.verify(token, jwtSecret);
     const { rows } = await query("SELECT id, name, email, global_role, approved FROM users WHERE id = $1", [payload.id]);
     if (!rows[0]) return res.status(401).json({ error: "Invalid session" });
-    if (!rows[0].approved) return res.status(403).json({ error: "Account access revoked or pending approval" });
     req.user = rows[0];
     next();
   } catch {
@@ -135,9 +134,6 @@ app.post("/api/auth/login", validate(loginSchema), async (req, res) => {
   const user = rows[0];
   if (!user || !(await bcrypt.compare(req.body.password, user.password_hash))) {
     return res.status(401).json({ error: "Invalid email or password" });
-  }
-  if (!user.approved) {
-    return res.status(403).json({ error: "Your account is pending administrator approval." });
   }
   sendAuth(res, user);
 });
@@ -248,10 +244,18 @@ app.get("/api/projects/discover", requireAuth, async (req, res) => {
 app.post("/api/projects/:id/join", requireAuth, async (req, res) => {
   const projectId = Number(req.params.id);
   if (!Number.isInteger(projectId)) return res.status(400).json({ error: "Invalid project id" });
+  
+  await query(
+    `INSERT INTO project_members (project_id, user_id, role)
+     VALUES ($1, $2, 'Member')
+     ON CONFLICT (project_id, user_id) DO NOTHING`,
+    [projectId, req.user.id],
+  );
+
   await query(
     `INSERT INTO project_join_requests (project_id, user_id, status)
-     VALUES ($1, $2, 'Pending')
-     ON CONFLICT (project_id, user_id) DO UPDATE SET status = 'Pending', created_at = NOW()`,
+     VALUES ($1, $2, 'Approved')
+     ON CONFLICT (project_id, user_id) DO UPDATE SET status = 'Approved', created_at = NOW()`,
     [projectId, req.user.id],
   );
   res.status(201).json({ ok: true });
@@ -306,30 +310,6 @@ app.delete("/api/projects/:id/members/:userId", requireAuth, requireMember, requ
   res.json({ ok: true });
 });
 
-app.get("/api/projects/:id/requests", requireAuth, requireMember, requireAdmin, async (req, res) => {
-  const { rows } = await query(
-    `SELECT u.id, u.name, u.email, r.status, r.created_at
-     FROM project_join_requests r
-     JOIN users u ON u.id = r.user_id
-     WHERE r.project_id = $1 AND r.status = 'Pending'
-     ORDER BY r.created_at ASC`,
-    [req.projectId]
-  );
-  res.json({ requests: rows });
-});
-
-app.post("/api/projects/:id/requests/:userId/approve", requireAuth, requireMember, requireAdmin, async (req, res) => {
-  const userId = Number(req.params.userId);
-  await query("UPDATE project_join_requests SET status = 'Approved' WHERE project_id = $1 AND user_id = $2", [req.projectId, userId]);
-  await query("INSERT INTO project_members (project_id, user_id, role) VALUES ($1, $2, 'Member') ON CONFLICT DO NOTHING", [req.projectId, userId]);
-  res.json({ ok: true });
-});
-
-app.post("/api/projects/:id/requests/:userId/reject", requireAuth, requireMember, requireAdmin, async (req, res) => {
-  const userId = Number(req.params.userId);
-  await query("UPDATE project_join_requests SET status = 'Rejected' WHERE project_id = $1 AND user_id = $2", [req.projectId, userId]);
-  res.json({ ok: true });
-});
 
 app.get("/api/projects/:id/tasks", requireAuth, requireMember, async (req, res) => {
   const memberFilter = req.memberRole === "Admin" ? "" : "AND (t.assigned_to = $2 OR t.backup_assigned_to = $2 OR t.created_by = $2)";
@@ -562,26 +542,6 @@ app.get("/api/admin/users", requireAuth, async (req, res) => {
   res.json({ users: rows });
 });
 
-app.post("/api/admin/users/:userId/approve", requireAuth, async (req, res) => {
-  if (req.user.global_role !== "System Admin") {
-    return res.status(403).json({ error: "Access denied" });
-  }
-  const userId = Number(req.params.userId);
-  await query("UPDATE users SET approved = TRUE WHERE id = $1", [userId]);
-  res.json({ ok: true });
-});
-
-app.post("/api/admin/users/:userId/reject", requireAuth, async (req, res) => {
-  if (req.user.global_role !== "System Admin") {
-    return res.status(403).json({ error: "Access denied" });
-  }
-  const userId = Number(req.params.userId);
-  if (userId === req.user.id) {
-    return res.status(400).json({ error: "Cannot reject yourself" });
-  }
-  await query("DELETE FROM users WHERE id = $1 AND approved = FALSE", [userId]);
-  res.json({ ok: true });
-});
 
 const distPath = path.resolve(__dirname, "../dist");
 app.use(express.static(distPath));
